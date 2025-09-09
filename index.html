@@ -1,0 +1,571 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Simulador de Surgimento da Vida — Modos: Simplificado e Realista</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" />
+<script defer src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<meta name="description" content="Simulador didático de abiogênese: modos Simplificado e Realista com heurísticas plausíveis (T, pH, UV, ciclos, minerais, degradação, catástrofes, cadeia mínima) para estimar probabilidade e tempo para vida emergir.">
+<style>
+:root{
+  --bg:#0f1117; --fg:#e6e6eb; --muted:#9aa0a6;
+  --card:#151924; --border:#2a2f3b;
+  --blue:#6c90ff; --red:#ff6b6b; --green:#10b981; --amber:#f59e0b; --violet:#a78bfa;
+}
+[data-theme="light"]{
+  --bg:#f7f8fb; --fg:#14161c; --muted:#4b5563;
+  --card:#ffffff; --border:#e5e7eb;
+  --blue:#3853d8; --red:#d43f3f; --green:#0c8d6a; --amber:#b27208; --violet:#6b46c1;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+header{position:sticky;top:0;z-index:10;background:var(--card);border-bottom:1px solid var(--border);padding:.9rem 1rem;display:flex;gap:.75rem;align-items:center;justify-content:space-between}
+h1{margin:0;font-size:clamp(1rem,2.4vw,1.25rem)}
+a{color:var(--fg)}
+.btn{border:1px solid var(--border);background:transparent;color:var(--fg);padding:.5rem .8rem;border-radius:10px;cursor:pointer}
+.btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+.btn:active{transform:translateY(1px)}
+main{max-width:1280px;margin:1rem auto;padding:0 1rem}
+.grid{display:grid;gap:1rem;grid-template-columns:1fr}
+@media (min-width:1100px){ .grid{grid-template-columns:1fr 1fr} }
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:1rem}
+.legend{font-weight:700;margin-bottom:.6rem;display:flex;gap:.5rem;align-items:center}
+.muted{color:var(--muted);font-size:.9rem}
+.small{font-size:.85rem}
+.split{display:grid;gap:.75rem;grid-template-columns:1fr}
+@media (min-width:640px){ .split{grid-template-columns:1fr 1fr} }
+label{display:flex;justify-content:space-between;align-items:center;gap:.75rem;margin:.45rem 0}
+input[type="number"], select, input[type="text"]{
+  width:160px;padding:.45rem .6rem;border-radius:10px;border:1px solid var(--border);
+  background:transparent;color:var(--fg)
+}
+.row{display:flex;flex-wrap:wrap;gap:.5rem}
+.pill{display:inline-flex;align-items:center;gap:.35rem;border:1px solid var(--border);padding:.25rem .55rem;border-radius:999px}
+.ok{background:rgba(16,185,129,.22)}
+.warn{background:rgba(245,158,11,.22)}
+.bad{background:rgba(255,107,107,.22)}
+.box{display:grid;grid-template-columns:auto 1fr;gap:.3rem .75rem;font-size:.92rem}
+.k{color:var(--muted)}
+canvas{background:var(--card);border:1px solid var(--border);border-radius:14px}
+.title{font-weight:700;margin:.2rem 0 .6rem}
+.hr{height:1px;background:var(--border);margin:.6rem 0}
+.notice{font-size:.86rem;border-left:3px solid var(--violet);padding:.5rem .75rem;background:rgba(167,139,250,.12);border-radius:8px}
+.progress{height:10px;background:rgba(108,144,255,.12);border-radius:999px;overflow:hidden;border:1px solid var(--border)}
+.progress>span{display:block;height:100%;width:0;background:var(--blue)}
+footer{max-width:1280px;margin:2rem auto 1.5rem;padding:0 1rem;color:var(--muted)}
+footer .about{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1rem}
+.cell{
+  width:64px;height:64px;border-radius:50%;border:2px solid var(--green);
+  box-shadow:0 0 0 0 rgba(16,185,129,.45);
+  display:inline-grid;place-items:center;transition:transform .2s;
+}
+.cell svg{width:36px;height:36px;opacity:.85}
+.cell.alive{animation:pulse 1.8s infinite}
+@keyframes pulse{
+  0%{box-shadow:0 0 0 0 rgba(16,185,129,.45)}
+  70%{box-shadow:0 0 0 14px transparent}
+  100%{box-shadow:0 0 0 0 transparent}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Simulador de Surgimento da Vida</h1>
+  <nav class="row">
+    <a class="btn" href="README.md" target="_blank" rel="noopener">Tutorial</a>
+    <a class="btn" href="https://github.com/MarceloFortram/universos" target="_blank" rel="noopener">Repositorio</a>
+    <a class="btn" href="index_eng.html" rel="noopener">English</a>
+    <button id="btnTheme" class="btn" type="button">Tema</button>
+    <button id="btnRun" class="btn primary" type="button">Rodar</button>
+    <button id="btnStop" class="btn" type="button">Parar</button>
+  </nav>
+</header>
+
+<main>
+  <section class="grid">
+    <div class="card">
+      <div class="legend">1) Parametros ambientais e quimicos</div>
+      <div class="split">
+        <div>
+          <label><span>Temperatura (K)</span><input id="T" type="number" step="1" value="330"/></label>
+          <label><span>pH</span><input id="pH" type="number" step="0.1" value="7.0"/></label>
+          <label title="UV relativo (1 = Terra atual)">
+            <span>UV/X</span><input id="uv" type="number" step="0.1" value="1.0"/>
+          </label>
+          <label title="Ciclos umido-seco por 10^3 anos">
+            <span>Ciclos/10^3 anos</span><input id="cycles" type="number" step="1" value="30"/>
+          </label>
+          <label>
+            <span>Minerais cataliticos</span>
+            <select id="minerals">
+              <option value="none">Nenhum</option>
+              <option value="mont">Montmorilonita</option>
+              <option value="fes">FeS/NiS</option>
+              <option value="both">Ambos</option>
+            </select>
+          </label>
+        </div>
+        <div>
+          <label>
+            <span>Modo de simulacao</span>
+            <select id="mode">
+              <option value="simple">Simplificado</option>
+              <option value="realistic">Realista</option>
+            </select>
+          </label>
+          <label title="N de simulacoes independentes">
+            <span>N simulacoes</span><input id="N" type="number" step="100" value="5000"/>
+          </label>
+          <label title="Passos por simulacao (tempo total = passos * dt)">
+            <span>Passos max</span><input id="stepsMax" type="number" step="1000" value="20000"/>
+          </label>
+          <label title="Tamanho do passo (anos/passo)">
+            <span>dt (anos/passo)</span><input id="dtYears" type="number" step="0.1" value="0.5"/>
+          </label>
+          <label title="Semente para reproducibilidade">
+            <span>Semente</span><input id="seed" type="text" value="vida-123"/>
+          </label>
+          <label title="Para ao encontrar o primeiro sucesso">
+            <span>Parar no 1o sucesso</span>
+            <select id="stopOnFirst">
+              <option value="yes">Sim</option>
+              <option value="no" selected>Nao</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div class="notice" style="margin-top:.5rem">
+        Modo Simplificado: janelas amplas e heuristicas didaticas. Modo Realista: janelas estreitas, degradacao, cadeia minima, catastrofes e escala geologica.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="legend">2) Resultados</div>
+      <div class="row" style="align-items:center;gap:1rem">
+        <div class="cell" id="cellIcon" title="Simbolo de protocelula">
+          <svg viewBox="0 0 100 100" aria-hidden="true">
+            <circle cx="50" cy="50" r="28" fill="none" stroke="currentColor" stroke-width="6"/>
+            <circle cx="40" cy="45" r="5" fill="currentColor"/>
+            <circle cx="60" cy="55" r="4" fill="currentColor"/>
+            <path d="M35,62 Q50,72 65,60" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="box" style="flex:1">
+          <div class="k">P(vida)</div><div id="pLife">—</div>
+          <div class="k">IC95% (Wilson)</div><div id="ciLife">—</div>
+          <div class="k">Mediana t*</div><div id="tMed">—</div>
+          <div class="k">Q1-Q3 t*</div><div id="tIQR">—</div>
+          <div class="k">Sucessos</div><div id="succ">—</div>
+          <div class="k">Melhor caso t*</div><div id="best">—</div>
+        </div>
+      </div>
+      <div class="progress" style="margin-top:.7rem"><span id="bar"></span></div>
+      <div class="row" style="margin-top:.6rem">
+        <button id="btnReplay" class="btn">Reproduzir recorde</button>
+        <button id="btnCSV" class="btn">Exportar CSV</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="grid" style="margin-top:1rem">
+    <div class="card">
+      <div class="legend">3) Histograma de t* (tempo ate vida) + Q1/Mediana/Q3</div>
+      <div style="position:relative;height:330px">
+        <canvas id="chartHist"></canvas>
+      </div>
+    </div>
+    <div class="card">
+      <div class="legend">4) Sucesso acumulado ao longo das simulacoes</div>
+      <div style="position:relative;height:330px">
+        <canvas id="chartProg"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <section class="grid" style="margin-top:1rem">
+    <div class="card">
+      <div class="legend">5) Dispersao (t* vs fator termico)</div>
+      <div style="position:relative;height:330px">
+        <canvas id="chartScatter"></canvas>
+      </div>
+      <div class="muted small" style="margin-top:.4rem">
+        Fator termico e a media do impulso de temperatura efetivo proximo ao surgimento.
+      </div>
+    </div>
+    <div class="card">
+      <div class="legend">6) Heatmap T x pH (sucesso em %)</div>
+      <div class="row" style="gap:.75rem;margin:.5rem 0">
+        <label class="small"><span style="margin-right:.4rem">Resolucao</span>
+          <input id="res" type="number" step="2" min="8" max="48" value="24" />
+        </label>
+        <label class="small"><span style="margin-right:.4rem">N por celula</span>
+          <input id="Ncell" type="number" step="50" min="50" max="2000" value="200" />
+        </label>
+        <button id="btnHeat" class="btn">Gerar heatmap</button>
+      </div>
+      <div style="position:relative;height:360px">
+        <canvas id="heat" style="width:100%;height:100%;border-radius:12px;border:1px solid var(--border)"></canvas>
+        <div id="heatInfo" class="pill" style="position:absolute;left:10px;top:10px">T=— K - pH=— - sucesso=—%</div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="about">
+    <b>Sobre o Autor — Marcelo Fortran</b><br/>
+    Entusiasta de programacao e curioso de ciencia. Projeto para tornar astrobiologia e quimica prebiotica acessiveis via simulacoes no navegador.
+  </div>
+  <div style="margin-top:.6rem">
+    Tutorial: <a href="README.md">README.md</a> - English: <a href="index_eng.html">index_eng.html</a> - Codigo: <a href="https://github.com/MarceloFortram/universos">GitHub</a>
+  </div>
+</footer>
+
+<script>
+(function(){
+  const root = document.documentElement;
+  const saved = localStorage.getItem('theme') || 'dark';
+  root.setAttribute('data-theme', saved);
+  document.getElementById('btnTheme').addEventListener('click', function(){
+    const now = root.getAttribute('data-theme')==='dark' ? 'light':'dark';
+    root.setAttribute('data-theme', now);
+    localStorage.setItem('theme', now);
+  });
+})();
+const $ = function(s){ return document.querySelector(s); };
+const clamp = function(v,a,b){ return Math.max(a,Math.min(b,v)); };
+
+function hashStr(str){
+  var h=1779033703^str.length; for(var i=0;i<str.length;i++){ h=Math.imul(h^str.charCodeAt(i),3432918353); h=h<<13|h>>>19; }
+  return function(){ h=Math.imul(h^(h>>>16),2246822507); h=Math.imul(h^(h>>>13),3266489909); return (h^=h>>>16)>>>0; };
+}
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; var t=Math.imul(a^a>>>15,1|a); t^=t+Math.imul(t^t>>>7,61|t); return ((t^t>>>14)>>>0)/4294967296; }; }
+
+/* Worker source as ASCII lines */
+function workerSource(){
+  var lines = [
+"let rng = Math.random;",
+"function hashStr(str){ let h=1779033703^str.length; for(let i=0;i<str.length;i++){ h=Math.imul(h^str.charCodeAt(i),3432918353); h=h<<13|h>>>19; } return ()=>{ h=Math.imul(h^(h>>>16),2246822507); h=Math.imul(h^(h>>>13),3266489909); return (h^=h>>>16)>>>0; }; }",
+"function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t^=t+Math.imul(t^t>>>7,61|t); return ((t^t>>>14)>>>0)/4294967296; }}",
+"function norm(x,mu,sig){ const z=(x-mu)/sig; return Math.exp(-0.5*z*z); }",
+"function uvFactor(uv){ if(uv<=1.5) return 1.0 + 0.12*(uv-1.0); const d=Math.max(0,uv-1.5); return Math.max(0.5, 1.06*Math.exp(-0.25*d)); }",
+"function cycleFactor(c){ return Math.tanh(c/30); }",
+"function mineralBoost(minerals, ch){ if(minerals==='mont' && (ch==='poly' || ch==='comp')) return 1.25; if(minerals==='fes' && (ch==='cat')) return 1.25; if(minerals==='both') return (ch==='comp'?1.2:1.25); return 1.0; }",
+"function stepRates(env, mode){ const T=env.T, pH=env.pH, uv=env.uv, cycles=env.cycles, minerals=env.minerals; const fT = (mode==='realistic')? norm(T,330,8) : norm(T,330,25); const fpH = (mode==='realistic')? norm(pH,7.0,0.5) : norm(pH,7.0,1.8); const fUV = uvFactor(uv); const fCyc= cycleFactor(cycles);",
+"  let kM=4e-3*fT*fpH*fUV; let kAct=2e-3*fT*fUV; let kPoly=1.2e-3*fT*fpH*mineralBoost(minerals,'poly'); let kVes=8e-4*fT*fpH*fCyc*mineralBoost(minerals,'comp'); let kRep=6e-4*fT*fpH*mineralBoost(minerals,'cat');",
+"  if(mode==='realistic'){ const damp=0.6; kM*=damp; kAct*=damp; kPoly*=damp; kVes*=damp; kRep*=damp; }",
+"  kM=Math.max(0,Math.min(0.05,kM)); kAct=Math.max(0,Math.min(0.05,kAct)); kPoly=Math.max(0,Math.min(0.05,kPoly)); kVes=Math.max(0,Math.min(0.05,kVes)); kRep=Math.max(0,Math.min(0.05,kRep));",
+"  return {kM:kM,kAct:kAct,kPoly:kPoly,kVes:kVes,kRep:kRep,fT:fT}; }",
+"function simulateBatch(cfg){ const N=cfg.N, stepsMax=cfg.stepsMax, dtYears=cfg.dtYears, seed=cfg.seed, stopOnFirst=cfg.stopOnFirst, env=cfg.env, mode=cfg.mode; const h=hashStr(seed); rng = mulberry32(h()); const succTimes=[], succTFac=[]; let successes=0, best=Infinity, bestSnap=null; const progressEvery=Math.max(50, Math.floor(N/100));",
+"  const needSustain = (mode==='realistic')? 30 : 12; const needChain = (mode==='realistic')? 20 : 3; const needVes = (mode==='realistic')? 5 : 1; const needRep = (mode==='realistic')? 0.9 : 0.5; const geoScale = (mode==='realistic')? 1e6 : 1.0;",
+"  for(let i=0;i<N;i++){ const r=stepRates(env, mode); let chainL=0, ves=0, repFid=0.0, sustain=0; let tStar=-1; let tFacAcc=0, tFacN=0;",
+"    for(let step=0; step<stepsMax; step++){",
+"      if(rng()<r.kPoly) chainL += 1 + (rng()<r.kAct ? 1:0);",
+"      if(rng()<r.kVes) ves++;",
+"      if(rng()<r.kRep) repFid = Math.min(1.0, repFid + 0.05*r.fT);",
+"      if(rng()<r.kM) { /* monomeros disponiveis (abstrato) */ }",
+"      if(mode==='realistic'){",
+"        const pBreak = Math.min(0.2, 0.002*(1 + Math.max(0, env.T-330)/40 + Math.max(0, env.uv-1.0)*0.8));",
+"        if(rng()<pBreak){ chainL = Math.floor(chainL*0.5); if(rng()<0.4 && ves>0) ves -= 1; repFid = Math.max(0, repFid - 0.05); }",
+"        if(rng()<0.01){ chainL=0; ves=0; sustain=0; repFid*=0.5; }",
+"      }",
+"      if(chainL>=needChain && ves>=needVes && repFid>=needRep){ sustain++; } else { sustain=0; }",
+"      if(chainL>0 || ves>0 || repFid>0){ tFacAcc += r.fT; tFacN++; }",
+"      if(sustain>=needSustain){ tStar = (step+1)*dtYears*geoScale; break; }",
+"    }",
+"    if(tStar>0){ successes++; succTimes.push(tStar); succTFac.push( (tFacN>0? tFacAcc/tFacN : r.fT) ); if(tStar<best){ best=tStar; bestSnap={tStar:tStar, env:JSON.parse(JSON.stringify(env)), seed:seed+'#'+i, mode:mode}; } if(stopOnFirst){ postMessage({type:'done', successes:successes, succTimes:succTimes, succTFac:succTFac, best:bestSnap, i:i+1, N:N}); return; } }",
+"    if(i%progressEvery===0){ postMessage({type:'prog', i:i}); }",
+"  }",
+"  postMessage({type:'done', successes:successes, succTimes:succTimes, succTFac:succTFac, best:bestSnap, i:N, N:N});",
+"}",
+"function simulateGrid(cfg){ const Tmin=cfg.Tmin, Tmax=cfg.Tmax, pHmin=cfg.pHmin, pHmax=cfg.pHmax, res=cfg.res, Ncell=cfg.Ncell, baseEnv=cfg.baseEnv, stepsMax=cfg.stepsMax, seed=cfg.seed, mode=cfg.mode; const out=new Float32Array(res*res); const h=hashStr(seed||'grid'); rng=mulberry32(h()); const needSustain=(mode==='realistic')?30:12; const needChain=(mode==='realistic')?20:3; const needVes=(mode==='realistic')?5:1; const needRep=(mode==='realistic')?0.9:0.5;",
+"  for(let yi=0; yi<res; yi++){ for(let xi=0; xi<res; xi++){ const T = Tmin + (xi/(res-1))*(Tmax-Tmin); const pH = pHmin + ((res-1-yi)/(res-1))*(pHmax-pHmin); let s=0; for(let n=0;n<Ncell;n++){ const env=Object.assign({}, baseEnv, {T:T, pH:pH}); const r=stepRates(env, mode); let chainL=0, ves=0, repFid=0.0, sustain=0; for(let step=0; step<stepsMax; step++){ if(rng()<r.kPoly) chainL += 1 + (rng()<r.kAct ? 1:0); if(rng()<r.kVes) ves++; if(rng()<r.kRep) repFid=Math.min(1.0, repFid+0.05*r.fT); if(mode==='realistic'){ const pBreak=Math.min(0.2, 0.002*(1 + Math.max(0, env.T-330)/40 + Math.max(0, env.uv-1.0)*0.8)); if(rng()<pBreak){ chainL=Math.floor(chainL*0.5); if(rng()<0.4 && ves>0) ves-=1; repFid=Math.max(0,repFid-0.05); } if(rng()<0.01){ chainL=0; ves=0; sustain=0; repFid*=0.5; } } sustain=(chainL>=needChain && ves>=needVes && repFid>=needRep)?(sustain+1):0; if(sustain>=needSustain){ s++; break; } } } out[yi*res+xi]=100*s/Ncell; } if(yi%2===0) postMessage({type:'gridProg', yi:yi}); } postMessage({type:'gridDone', res:res, data:out.buffer }, [out.buffer]); }",
+"onmessage=function(e){ const kind=e.data.kind, cfg=e.data.cfg; if(kind==='batch') simulateBatch(cfg); else if(kind==='grid') simulateGrid(cfg); };"
+  ];
+  return lines.join("\n");
+}
+function makeWorker(){
+  var blob = new Blob([workerSource()], {type:'application/javascript'});
+  return new Worker(URL.createObjectURL(blob));
+}
+
+/* Dois workers */
+var workerBatch = makeWorker();
+var workerGrid  = makeWorker();
+
+/* Estado */
+var running=false, record=null, lastCSV=null;
+var histChart, progChart, scatterChart;
+
+/* Leitura dos parametros */
+function readParams(){
+  function num(id, def){ var v=parseFloat($(id).value); return isFinite(v)?v:def; }
+  function int(id, def){ var v=parseInt($(id).value); return isFinite(v)?v:def; }
+  return {
+    env:{
+      T: num('#T', 330),
+      pH: num('#pH', 7.0),
+      uv: num('#uv', 1.0),
+      cycles: int('#cycles', 30),
+      minerals: $('#minerals').value
+    },
+    N: int('#N', 5000),
+    stepsMax: int('#stepsMax', 20000),
+    dtYears: num('#dtYears', 0.5),
+    seed: $('#seed').value || 'vida',
+    stopOnFirst: $('#stopOnFirst').value==='yes',
+    mode: $('#mode').value
+  };
+}
+
+/* Estatistica */
+function wilson(p, n, z){ if(z===undefined) z=1.96; if(n<=0) return [0,0]; var phat=p/n; var den=1+z*z/n; var center=(phat+z*z/(2*n))/den; var marg=(z*Math.sqrt((phat*(1-phat)+z*z/(4*n))/n))/den; return [Math.max(0,center-marg), Math.min(1,center+marg)]; }
+function quantiles(arr, qs){ if(!qs) qs=[0.25,0.5,0.75]; if(!arr.length) return qs.map(function(){return NaN;}); var a=arr.slice().sort(function(x,y){return x-y;}); return qs.map(function(q){ var pos=(a.length-1)*q; var lo=Math.floor(pos), hi=Math.ceil(pos); if(lo===hi) return a[lo]; return a[lo]+(a[hi]-a[lo])*(pos-lo); }); }
+
+/* UI helpers */
+function setText(id, txt){ var el=$(id); if(el) el.textContent = String(txt); }
+function setBar(frac){ $('#bar').style.width = (100*clamp(frac,0,1))+'%'; }
+function pulseAlive(on){ var el=$('#cellIcon'); if(on) el.classList.add('alive'); else el.classList.remove('alive'); }
+
+/* Charts */
+function ensureHist(data, iq){
+  var ctx=$('#chartHist').getContext('2d');
+  var bins=24;
+  var max=data.length?Math.max.apply(null,data):1;
+  var min=data.length?Math.min.apply(null,data):0;
+  var bw=(max-min)/bins || 1;
+  var edges=Array.from({length:bins+1}, function(_,i){return min+i*bw;});
+  var counts=new Array(bins).fill(0);
+  data.forEach(function(v){
+    var k=Math.min(bins-1, Math.max(0, Math.floor((v-min)/bw)));
+    counts[k]++;
+  });
+  var centers=edges.slice(0,-1).map(function(e,i){return e+bw/2;});
+  var lines=(isFinite(iq.q1)&&isFinite(iq.med)&&isFinite(iq.q3))?[{x:iq.q1,color:getVar('--amber')},{x:iq.med,color:getVar('--green')},{x:iq.q3,color:getVar('--amber')}]:[];
+  var plugin={ id:'vlines', afterDraw:function(chart){ var ctx=chart.ctx, x=chart.scales.x, y=chart.scales.y; ctx.save(); ctx.setLineDash([6,4]); ctx.lineWidth=1; lines.forEach(function(L){ var xp=x.getPixelForValue(L.x); if(!isFinite(xp)) return; ctx.strokeStyle=L.color; ctx.beginPath(); ctx.moveTo(xp,y.top); ctx.lineTo(xp,y.bottom); ctx.stroke(); }); ctx.restore(); } };
+  if(histChart) histChart.destroy();
+  histChart=new Chart(ctx,{ type:'bar', data:{ labels:centers, datasets:[{label:'t* (anos)', data:counts, borderColor:getVar('--blue'), backgroundColor:getVar('--blue')+'33'}]}, options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{ title:{display:true,text:'t* (anos)',color:getVar('--muted')}, ticks:{color:getVar('--muted')} }, y:{ title:{display:true,text:'Contagem',color:getVar('--muted')}, ticks:{color:getVar('--muted')}, beginAtZero:true } }, plugins:{legend:{labels:{color:getVar('--fg')}}} }, plugins:[plugin] });
+}
+function ensureProg(series){
+  var ctx = document.getElementById('chartProg').getContext('2d');
+  if (progChart) { progChart.destroy(); }
+
+  var labels = series.map(function(_, i){ return i + 1; });
+  var dataset = {
+    label: 'Taxa acumulada',
+    data: series,
+    borderColor: getVar('--violet'),
+    backgroundColor: 'transparent',
+    pointRadius: 0,
+    tension: 0.15
+  };
+
+  var cfg = {
+    type: 'line',
+    data: { labels: labels, datasets: [ dataset ] },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: {
+          title: { display: true, text: 'Simulacoes', color: getVar('--muted') },
+          ticks: { color: getVar('--muted') }
+        },
+        y: {
+          title: { display: true, text: 'P acumulada', color: getVar('--muted') },
+          min: 0,
+          max: 1,
+          ticks: { color: getVar('--muted') }
+        }
+      },
+      plugins: {
+        legend: { labels: { color: getVar('--fg') } }
+      }
+    }
+  };
+
+  progChart = new Chart(ctx, cfg);
+}
+
+function ensureScatter(points){
+  var ctx = document.getElementById('chartScatter').getContext('2d');
+  if (scatterChart) { scatterChart.destroy(); }
+
+  var dataset = {
+    label: 'Sucessos',
+    data: points, // [{x:..., y:...}]
+    borderColor: getVar('--green'),
+    backgroundColor: getVar('--green') + '33'
+  };
+
+  var cfg = {
+    type: 'scatter',
+    data: { datasets: [ dataset ] },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: {
+          title: { display: true, text: 'Fator termico (adim.)', color: getVar('--muted') },
+          min: 0,
+          max: 1,
+          ticks: { color: getVar('--muted') }
+        },
+        y: {
+          title: { display: true, text: 't* (anos)', color: getVar('--muted') },
+          ticks: { color: getVar('--muted') }
+        }
+      },
+      plugins: {
+        legend: { labels: { color: getVar('--fg') } }
+      }
+    }
+  };
+
+  scatterChart = new Chart(ctx, cfg);
+}
+
+
+/* Heatmap */
+function drawHeatCanvas(res, buf, Tmin,Tmax,pHmin,pHmax){
+  var cvs=$('#heat'); var ctx=cvs.getContext('2d');
+  var dpr=window.devicePixelRatio||1;
+  var W=Math.floor(cvs.clientWidth*dpr), H=Math.floor(cvs.clientHeight*dpr);
+  cvs.width=W; cvs.height=H; ctx.fillStyle=getVar('--card'); ctx.fillRect(0,0,W,H);
+  var data=new Float32Array(buf);
+  var mL=50, mR=18, mT=18, mB=42;
+  var plotW=W-mL-mR, plotH=H-mT-mB;
+  function color(p){ var h=(clamp(p,0,100)/100)*120; return 'hsl('+h+'deg 80% 50%)'; }
+  for(var yi=0; yi<res; yi++){
+    for(var xi=0; xi<res; xi++){
+      var val=data[yi*res+xi];
+      ctx.fillStyle=color(val);
+      var x=mL+Math.floor((xi/res)*plotW);
+      var y=mT+Math.floor(((res-1-yi)/res)*plotH);
+      var w=Math.ceil(plotW/res)+1, h=Math.ceil(plotH/res)+1;
+      ctx.fillRect(x,y,w,h);
+    }
+  }
+  ctx.strokeStyle=getVar('--border'); ctx.lineWidth=1*dpr;
+  ctx.beginPath(); ctx.moveTo(mL,mT); ctx.lineTo(mL,mT+plotH); ctx.lineTo(mL+plotW,mT+plotH); ctx.stroke();
+  ctx.fillStyle=getVar('--muted'); ctx.font=(12*dpr)+'px system-ui, sans-serif';
+  ctx.textAlign='center'; ctx.fillText('Temperatura (K)', mL+plotW/2, H-14*dpr);
+  ctx.save(); ctx.translate(14*dpr, mT+plotH/2); ctx.rotate(-Math.PI/2); ctx.fillText('pH', 0, 0); ctx.restore();
+  ctx.textAlign='center';
+  for(var i=0;i<=3;i++){ var xTick=mL+i*(plotW/3); var Ttick=Tmin+i*(Tmax-Tmin)/3; ctx.fillText(Ttick.toFixed(0), xTick, mT+plotH+16*dpr); }
+  ctx.textAlign='right';
+  for(var j=0;j<=3;j++){ var yTick=mT+plotH - j*(plotH/3); var pTick=pHmin+j*(pHmax-pHmin)/3; ctx.fillText(pTick.toFixed(1), mL-6*dpr, yTick+4*dpr); }
+  cvs.onmousemove=function(ev){
+    var rect=cvs.getBoundingClientRect();
+    var px=(ev.clientX-rect.left)*dpr, py=(ev.clientY-rect.top)*dpr;
+    if(px<mL||px>mL+plotW||py<mT||py>mT+plotH) return;
+    var xi=Math.floor(((px-mL)/plotW)*res);
+    var yi=res-1-Math.floor(((py-mT)/plotH)*res);
+    var val=clamp(data[yi*res+xi],0,100);
+    var T=Tmin + (xi/(res-1))*(Tmax-Tmin);
+    var pH=pHmin + ((res-1-yi)/(res-1))*(pHmax-pHmin);
+    $('#heatInfo').textContent='T='+T.toFixed(0)+' K - pH='+pH.toFixed(1)+' - sucesso='+val.toFixed(0)+'%';
+  };
+}
+
+/* Execucao principal */
+function startRun(){
+  if(running) return;
+  running=true; setBar(0); pulseAlive(false);
+  var cfg=readParams();
+  var csvRows=[]; var header=['version','mode','seed','i','success','t_star_years','T','pH','uv','cycles','minerals','stepsMax','dtYears','stopOnFirst']; csvRows.push(header.join(','));
+  var progSeries=[];
+  workerBatch.onmessage=function(e){
+    var msg=e.data;
+    if(msg.type==='prog'){ setBar((msg.i||0)/cfg.N); }
+    else if(msg.type==='done'){
+      running=false; setBar(1);
+      var S=msg.successes|0; var times=msg.succTimes||[]; var tfac=msg.succTFac||[];
+      for(var i=0;i<cfg.N;i++){ var success=(i<times.length)?1:0; var t=(i<times.length)? times[i] : ''; csvRows.push(['v2', cfg.mode, cfg.seed, i, success, t, cfg.env.T, cfg.env.pH, cfg.env.uv, cfg.env.cycles, cfg.env.minerals, cfg.stepsMax, cfg.dtYears, cfg.stopOnFirst].join(',')); }
+      lastCSV=csvRows.join('\n');
+      var p = S / Math.max(1, cfg.N);
+      var ci = wilson(S, Math.max(1, cfg.N));
+      var q = quantiles(times, [0.25,0.5,0.75]);
+      setText('#pLife', (100*p).toFixed(2).replace('.', ',') + '%');
+      setText('#ciLife', (100*ci[0]).toFixed(2).replace('.', ',') + '% - ' + (100*ci[1]).toFixed(2).replace('.', ',') + '%');
+      setText('#tMed', isFinite(q[1])? (q[1].toFixed(1).replace('.', ',')+' anos') : '—');
+      setText('#tIQR', (isFinite(q[0])&&isFinite(q[2]))? (q[0].toFixed(1).replace('.', ',')+' - '+q[2].toFixed(1).replace('.', ',')+' anos') : '—');
+      setText('#succ', String(S));
+      setText('#best', (msg.best && msg.best.tStar)? (msg.best.tStar.toFixed(1).replace('.', ',')+' anos') : '—');
+      pulseAlive(S>0);
+      ensureHist(times, {q1:q[0], med:q[1], q3:q[2]});
+      for(var k=1;k<=cfg.N;k++){ progSeries.push(p); }
+      ensureProg(progSeries);
+      var points=times.map(function(t,i){ return {x:(tfac[i]||0.5), y:t}; });
+      ensureScatter(points);
+      if(msg.best){ record={snapshot:msg.best, cfg:cfg}; }
+    }
+  };
+  workerBatch.postMessage({ kind:'batch', cfg:cfg });
+}
+function stopRun(){
+  if(!running){
+    try{ workerBatch.terminate(); }catch(e){}
+    workerBatch = makeWorker(); setBar(0); return;
+  }
+  try{ workerBatch.terminate(); }catch(e){}
+  workerBatch = makeWorker(); running=false; setBar(0);
+}
+
+/* Heatmap driver */
+function startHeatmap(){
+  var res = clamp(parseInt($('#res').value)||24, 8, 48);
+  var Ncell = clamp(parseInt($('#Ncell').value)||200, 50, 2000);
+  var base = readParams();
+  var Tmin=280, Tmax=380, pHmin=4.5, pHmax=10.0;
+  $('#heatInfo').textContent='Gerando heatmap...';
+  try{ workerGrid.terminate(); }catch(e){}
+  workerGrid=makeWorker();
+  workerGrid.onmessage=function(e){
+    var msg=e.data;
+    if(msg.type==='gridDone'){ drawHeatCanvas(msg.res, msg.data, Tmin,Tmax,pHmin,pHmax); }
+  };
+  workerGrid.postMessage({ kind:'grid', cfg:{
+    Tmin:Tmin, Tmax:Tmax, pHmin:pHmin, pHmax:pHmax, res:res, Ncell:Ncell,
+    stepsMax: base.stepsMax, baseEnv: base.env, seed: 'grid-'+Date.now(), mode: base.mode
+  }});
+}
+
+/* CSV e Replay */
+function downloadCSV(){
+  if(!lastCSV){ alert('Nenhum resultado para exportar ainda. Rode uma simulacao.'); return; }
+  var blob = new Blob([lastCSV], {type:'text/csv'});
+  var url = URL.createObjectURL(blob);
+  var a=document.createElement('a'); a.href=url; a.download='simulador_vida.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+function replayBest(){
+  if(!record){ alert('Ainda nao ha recorde. Rode uma simulacao com sucesso primeiro.'); return; }
+  var snap=record.snapshot;
+  $('#seed').value = snap.seed;
+  $('#T').value = snap.env.T;
+  $('#pH').value = snap.env.pH;
+  $('#uv').value = snap.env.uv;
+  $('#cycles').value = snap.env.cycles;
+  $('#minerals').value = snap.env.minerals;
+  $('#mode').value = snap.mode || 'realistic';
+  $('#stopOnFirst').value = 'yes';
+  $('#N').value = 1000;
+  startRun();
+}
+
+/* Listeners */
+document.getElementById('btnRun').addEventListener('click', startRun);
+document.getElementById('btnStop').addEventListener('click', stopRun);
+document.getElementById('btnCSV').addEventListener('click', downloadCSV);
+document.getElementById('btnReplay').addEventListener('click', replayBest);
+document.getElementById('btnHeat').addEventListener('click', startHeatmap);
+
+/* CSS var helper */
+function getVar(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+</script>
+</body>
+</html>
